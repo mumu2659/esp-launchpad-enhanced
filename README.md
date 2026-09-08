@@ -1,115 +1,136 @@
 # ESP Launchpad Enhanced
 
-基于 [Espressif ESP Launchpad](https://github.com/espressif/esp-launchpad) 的非官方增强项目。
-保留上游源码与 Apache-2.0 LICENSE；增强入口为 `enhanced.html`，原始入口仍为 `index.html`。
+An independent, unofficial enhancement of [Espressif ESP Launchpad](https://github.com/espressif/esp-launchpad), focused on ESP32-C6 native USB recovery, firmware flashing, and serial monitoring.
 
-## 在线试用
+The upstream source and Apache-2.0 license are retained. The enhanced source entry is `enhanced.html`; the original entry remains `index.html`. See [the upstream README](README.upstream.md) and [LICENSE](LICENSE) for attribution. This project is not an official Espressif product.
 
-使用桌面 Chrome / Edge 打开 [在线页面](https://mumu2659.github.io/esp-launchpad-enhanced/)。无需安装 Node.js。
+## Try it online
 
-设备反复掉线、无法首次授权时，下载 [USB 助手启动包](https://mumu2659.github.io/esp-launchpad-enhanced/downloads/esp-launchpad-enhanced-usb-helper.zip)，完整解压后 Windows 运行 start-windows.cmd，macOS 运行 start.command。首次准备环境需要联网，助手会打开本地连接页。后续可使用包内“打开助手.html”。
+Open the **[web tool](https://mumu2659.github.io/esp-launchpad-enhanced/)** in desktop Chrome or Edge. The tool interface is currently in Chinese. Firmware is processed locally and is not uploaded.
 
-## 源码启动
+If a blank device repeatedly disconnects before you can authorize it, download the **[USB helper package](https://mumu2659.github.io/esp-launchpad-enhanced/downloads/esp-launchpad-enhanced-usb-helper.zip)** and extract it completely.
 
-需要 Node.js 20+ 和支持 Web Serial 的桌面 Chrome / Edge。
+| Platform | Launch |
+| --- | --- |
+| Windows | Double-click `start-windows.cmd` |
+| macOS | Double-click `start.command` |
+| Linux | Run `sh start.command` |
+
+No preinstalled Python, esptool, or Node.js is required for the helper. Its first launch requires internet access to prepare a dedicated environment; subsequent launches reuse the cache.
+
+The helper attempts to put the ESP32-C6 into download mode through native USB, releases the serial port, and opens the bundled local page at `http://localhost:4175`. First-time browser device authorization still requires a manual selection. The helper does not write or erase Flash or change eFuses.
+
+## Features
+
+- Native USB Serial/JTAG download reset, connection without reset, and UART automatic-reset modes.
+- Connection retries with serial-port cleanup, cancellation, device re-enumeration handling, and MAC identity checks.
+- Chip, Flash ID, and capacity detection before marking a connection ready.
+- Read-only download of the first 4 KB of Flash.
+- Flash multiple images or a merged image, with address, sector-overlap, capacity, and MD5 checks.
+- Full-chip erase with target details and an explicit `ERASE` confirmation.
+- A shared console for connection, flashing, and raw serial output, with baud-rate selection, start/stop, port selection, auto-scroll, clear, and export.
+- Module reset with confirmation and optional serial monitoring.
+- An optional local USB recovery helper with browser handoff and automatic exit.
+
+The interface uses a single connect/disconnect control and a single start/stop monitoring control. Recovery options and detailed diagnostics are collapsed by default.
+
+## USB helper behavior
+
+The launcher detects the system and CPU architecture, prepares its environment, and registers a per-user browser launch entry. Browser and operating-system prompts still require user approval; a website cannot silently install or launch local software.
+
+On the helper page, a single available, previously authorized ESP USB device can connect automatically. Otherwise, the page requests manual selection. It attempts automatic connection once on entry and does not reclaim a port after an intentional disconnect.
+
+After the page verifies the chip identity and caches its assets, it acknowledges the handoff. The helper then exits and releases its local server port. Reading and flashing can continue, and refresh works while the browser cache remains available. Run the helper again if that cache has been cleared.
+
+There is no startup service. Environment caches remain for reuse, and a completed terminal window may remain open. After initial setup, the HTML launcher included in the package can also request recovery.
+
+See the [USB helper guide](usb-helper/README.md) for installation locations, logs, removal, and platform limitations. That detailed guide is currently in Chinese.
+
+## Console, erase, and reset
+
+Connection and flashing logs appear without starting serial monitoring. Starting monitoring releases the flashing connection and reads raw serial output without an automatic reset. Monitoring and flashing do not read the port concurrently.
+
+The console supports baud rates from 9600 to 921600, streaming UTF-8 decoding, and plain-text output. It retains the latest 200,000 characters. Clear and export apply to all retained console output.
+
+Full-chip erase is available only when the download connection is ready. It displays the chip, MAC, and capacity before confirmation, keeps the device in download mode afterward, and does not modify eFuses. Failed writes and erases are not automatically retried.
+
+Module reset sends the normal-boot EN/RTS reset sequence. Successful signal delivery does not prove that firmware booted successfully. Native USB re-enumeration may interrupt monitoring; start monitoring again if needed. USB-to-UART adapters require a suitable automatic-reset circuit.
+
+If firmware logs are routed to UART0, use the corresponding USB-to-UART connection. Native USB does not necessarily carry UART0 logs.
+
+## Run from source
+
+Requires Node.js 20 or later and a desktop browser with Web Serial support.
 
 ```sh
 npm ci
 npm start
 ```
 
-打开 http://localhost:4173 。服务只监听本机，不需要 Python，也不依赖 CDN。
-浏览器首次选择串口必须由用户操作并授权。固件在本地处理，不上传。
+Open `http://localhost:4173`. The development server listens only on the local machine. The web interface does not require Python or runtime CDN requests.
 
-## 已实现
-
-- 原生 USB Serial/JTAG 自动进入下载模式、已在下载模式时不复位、UART 自动下载电路三种连接模式。
-- 前台检查，复位各阶段检测实际定时延迟；后台/严重延迟时终止本轮控制序列。
-- 失败先取消读取并释放旧端口，重新获取重枚举后的已授权串口，最多 4 次；同一会话再次连接先尝试不复位，再回退 USB 下载复位。
-- 只有握手、Flash ID 和容量检测成功才进入 ready；失败状态可重试，不吞异常。
-- 对 esptool-js 0.6.1 的 ESP32-C6 SPI1 基址兼容修正：0x60002000 → 0x60003000。
-- Web Serial 接收缓冲设为 64 KB；启动区读取校验并消费完整 MD5 尾帧。
-- 启动区 4 KB 只读下载、多文件/合并镜像烧录、扇区重叠及容量检查、MD5 校验。
-- 烧录必须选择文件和确认覆盖，写入失败不会自动重试；全片擦除需确认目标并输入 ERASE，失败不自动重试。
-- 日志包含复位等待实际耗时、控制失败、USB 上下线及连接尝试，可导出 JSON。
-- 增强界面不依赖 xterm，避免 Terminal 未加载导致全部按钮初始化失败。
-
-## 范围与限制
-
-烧录会覆盖文件涉及的完整 Flash 扇区。请使用目标芯片构建产物里的地址；工具不能替用户判断固件功能是否正确。
-保持页面可见直到操作完成；不能绕过浏览器后台调度限制或系统 USB 权限。
-首次使用点击“连接设备”；以后仍点击“连接设备”，避免在反复掉线时重复打开选择弹窗。
-重枚举后可恢复唯一匹配的已授权端口；已识别过的芯片会核对 MAC，不一致即停止。多个候选端口需要明确选择；刷新页面会清除会话中的 MAC 记录。
-成功后保持下载/stub 状态，不自动运行固件；复位或断电后需重新连接。
-日志可能含 MAC 等设备标识，分享前可检查。原版入口保留上游行为；增强功能仅在增强入口。
-
-## 验证
+## Validation
 
 ```sh
 npm test
 npm run test:browser
 ```
 
-自动测试覆盖连接失败清理、重试、取消、后台定时器延迟、Flash 边界检查。
-硬件验证记录见 `VALIDATION.md`。不要将模拟测试理解为实机烧录验证。
+Helper checks:
 
-## 依据
+```sh
+sh usb-helper/start.command --doctor
+sh usb-helper/start.command --self-test
+sh usb-helper/start.command --test-handoff
+```
 
-- https://github.com/espressif/esptool/blob/master/esptool/targets/esp32c6.py
-- https://github.com/espressif/esptool-js/blob/main/src/targets/esp32c6.ts
-- https://docs.espressif.com/projects/esp-idf/en/stable/esp32c6/api-guides/usb-serial-jtag-console.html
+Automated tests cover connection cleanup, retries, cancellation, delayed background timers, Flash boundaries, device controls, and helper handoff. Helper environment tests run on Windows, macOS, and Linux. Local browser tests use installed Chrome; CI uses Playwright Chromium.
 
-发布前重新评估依赖版本；升级 esptool-js 后应检查 `patchC6()` 是否仍需要。
-本项目不代表 Espressif 官方。上游 README 保存在 `README.upstream.md`。
+See [VALIDATION.md](VALIDATION.md) for detailed hardware evidence and limitations; this record is currently in Chinese. Simulated tests are not proof of physical-device flashing. Erase and reset controls have been tested with simulated devices, not by performing these operations on hardware.
 
-## GitHub Pages 部署
+## Build and deploy
 
-`npm run build` 生成 `dist/`，其中只有增强页、运行库和许可证。
-根入口是增强版；原版入口链接至官方 Launchpad。发布包不含 Flash 备份、诊断日志或仓库文件。
+```sh
+npm run build:helper
+```
 
-在 GitHub 仓库 Settings → Pages 中选择 GitHub Actions。
-推送到 `main` 后，工作流先运行测试，通过后部署 `dist/`。
-PR 只执行测试，不部署。
+This builds the enhanced website and creates `dist/downloads/esp-launchpad-enhanced-usb-helper.zip`, including its scripts and bundled web page. The runtime environment is downloaded on first use.
 
-本地模拟仓库子目录部署：
+`npm run build` builds the website alone into `dist/`. The deployed root opens the enhanced interface, and the original Launchpad link points to the official site. Published assets exclude Flash backups, diagnostic logs, and repository metadata.
+
+In GitHub **Settings → Pages**, select **GitHub Actions**. Pushes to `main` run tests and deploy on success. Pull requests run validation without deployment.
+
+To test a repository subpath locally:
 
 ```sh
 npm run build
 SITE_ROOT=dist BASE_PATH=/esp-launchpad-enhanced/ PORT=4174 npm start
-# 另一个终端
+```
+
+In another terminal:
+
+```sh
 BASE_URL=http://localhost:4174/esp-launchpad-enhanced/ npm run test:browser
 ```
 
-浏览器测试在本地使用已安装的 Chrome；CI 使用 Playwright Chromium。
+## Scope and limitations
 
-## 独立环境 USB 启动器
+Flashing overwrites the complete Flash sectors covered by the selected files. Use addresses from the firmware build for the target chip. The tool cannot determine whether a selected firmware image is functionally correct.
 
-客户无需安装 Python、esptool 或 Node：下载启动包、完整解压后，Windows 双击 start-windows.cmd，macOS 双击 start.command，Linux 运行 sh start.command。入口自动识别系统/CPU，首次联网准备专用运行环境；之后复用缓存。
+Keep the page visible until an operation finishes. Browser background scheduling and operating-system USB permissions still apply. Reset sequences are aborted when timing is substantially delayed.
 
-助手先通过原生 USB 尝试让 C6 进入下载模式，释放串口后打开包内网页（localhost:4175），预选“优先接管，失败自动恢复”连接。新站点仍需要客户在浏览器中首次点选设备授权。正常复位或断电后空 Flash 仍可能启动失败。
+After re-enumeration, recovery requires a uniquely matching authorized device. A known chip's MAC must match; multiple candidates require explicit selection. Reloading the page clears the session's MAC record.
 
-构建客户包：`npm run build:helper`，生成 `dist/downloads/esp-launchpad-enhanced-usb-helper.zip`；Pages 工作流使用该命令，网页中提供下载入口。详细使用、缓存位置和平台限制见 [USB 助手说明](usb-helper/README.md)。
+A successful connection leaves the chip in download or stub mode rather than automatically running firmware. Resetting or power-cycling a blank chip can still cause boot failure and repeated disconnections. The helper stabilizes the current download session; it does not install boot firmware.
 
-开发自检：`sh usb-helper/start.command --doctor`；恢复逻辑测试：`sh usb-helper/start.command --self-test`。macOS/Windows 的首次系统运行确认不能由脚本跳过。
+Logs can contain device identifiers such as MAC addresses. Review them before sharing.
 
-助手入口会检查当前站点已授权的 ESP USB 端口：唯一可用设备自动连接，未授权/未上线或多个候选时提示手动选择，不自行弹出首次授权窗口。只在进入页面时尝试一次；主动断开后不会自动抢回串口。环境检查发生在启动脚本阶段，独立于浏览器授权。烧录仍需要用户选择文件并确认。
+## Implementation references
 
-网页确认芯片身份并缓存配套页面后，向助手发送接管确认，助手自动退出并释放本地服务端口。当前页面可继续读取/烧录，浏览器缓存有效时也可刷新；清理缓存后重新运行助手。终端可能保留已完成窗口，运行环境缓存不会自动删除。完整流程测试：`sh usb-helper/start.command --test-handoff`。
+The enhanced interface includes an ESP32-C6 SPI1 base-address compatibility correction for esptool-js 0.6.1, a 64 KB Web Serial receive buffer, and complete MD5 trailer handling for Flash reads. It does not depend on xterm.
 
+- [Python esptool ESP32-C6 target](https://github.com/espressif/esptool/blob/master/esptool/targets/esp32c6.py)
+- [esptool-js ESP32-C6 target](https://github.com/espressif/esptool-js/blob/main/src/targets/esp32c6.ts)
+- [ESP32-C6 USB Serial/JTAG documentation](https://docs.espressif.com/projects/esp-idf/en/stable/esp32c6/api-guides/usb-serial-jtag-console.html)
 
-首次运行启动包会在当前用户目录注册网页唤起入口。之后助手网页的“连接设备”可先请求打开本地助手，恢复完成后再选择 USB；也提供直接授权入口。浏览器/系统的外部应用确认仍由用户完成。后台恢复与网页接管结束后全部助手进程退出，没有开机常驻服务。安装位置、日志、移除方法和平台验证范围见 USB 助手说明。
-
-主界面统一使用“连接设备”；“启动 USB 恢复助手”和“设备已稳定，直接授权”位于默认折叠的“连接遇到问题？”中。
-
-
-新增操作：
-
-- 全片擦除：仅在下载连接就绪时可用，显示芯片、MAC 与容量，输入 ERASE 后清除全部 Flash。完成后保持下载模式；不修改 eFuse。
-- 串口控制台：支持 9600–921600 波特率选项、开始/停止、更换串口、自动滚动、清空和导出。保留最近 20 万字符；UTF-8 流式解码，输出按纯文本显示。监听会释放烧录连接，不自动复位，不与烧录同时读取串口。
-- 模组重启：确认后发送正常启动的 EN/RTS 复位序列，可选择继续监听。只报告重启信号是否发送，不将其等同于固件启动成功。原生 USB 重新枚举后监听可能停止，需要再次开始监听；USB 转串口需要自动复位电路。
-
-控制台统一显示连接、烧录及模组串口输出，详细诊断默认折叠。如果固件将日志输出到 UART0，需要使用相应 USB 转串口设备；原生 USB 不保证包含 UART0 日志。新功能由模拟设备验证，尚未实机执行擦除或重启。
-
-客户包新增“打开助手.html”：完成首次脚本运行后，可双击该入口通过按钮唤起助手。首次使用的系统入口及拖放文件生成完整路径的方法也在页面内说明。
-
-控制台无需开始监听即可看到连接和烧录日志；“开始监听”用于切换到模组原始串口输出。清空与导出作用于当前控制台保留的全部输出。
+Reassess dependency versions before releases and review whether `patchC6()` is still needed after upgrading esptool-js.
