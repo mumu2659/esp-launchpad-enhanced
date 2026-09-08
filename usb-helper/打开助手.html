@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>打开 ESP Launchpad Enhanced</title><style>
+body{font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#eef3f4;color:#172c35;margin:0;padding:40px 20px}main{max-width:620px;margin:auto;background:white;padding:32px;border-radius:16px}h1{font-size:24px}a.button{display:inline-block;background:#008b7b;color:white;padding:12px 24px;border-radius:8px;text-decoration:none}p,li{color:#566d75}code{background:#eef3f4;padding:2px 5px;border-radius:4px}summary{cursor:pointer}small{color:#647982}
+</style></head><body><main><h1>ESP Launchpad Enhanced</h1><p>连接模组后，点击下面的按钮。助手会恢复 USB 下载模式，并打开配套连接页面。</p>
+<a class="button" href="esp-launchpad-enhanced://recover">启动 USB 助手</a>
+<p><small>浏览器提示打开外部应用时，请确认打开。网页接管成功后，助手自动退出。</small></p>
+<details open><summary>首次使用，或点击后没有反应？</summary><ol><li>完整解压启动包。</li><li>macOS：在访达中双击同目录的 <code>start.command</code>。Windows：双击 <code>start-windows.cmd</code>。Linux：在解压目录打开终端，执行 <code>sh start.command</code>。</li><li>首次运行会准备独立环境并注册启动入口。以后可双击本页面，再点击“启动 USB 助手”。</li></ol><p>macOS 若需通过终端运行：先输入 <code>sh </code>（末尾留一个空格），再把 <code>start.command</code> 文件从访达拖入终端并回车，系统会自动填写完整路径。不要手工抄写长路径。</p></details>
+<p><a href="http://localhost:4175/?mode=no_reset&amp;helper=1">助手已经运行？打开连接页面</a></p>
+<small>这个入口不直接执行本地脚本。首次系统运行确认、外部应用确认和 USB 授权仍需由你完成。</small></main></body></html>

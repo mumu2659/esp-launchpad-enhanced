@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ESP Launchpad Enhanced</title><link rel="stylesheet" href="enhanced/style.css"></head>
+<body><header><div class="mark">E<span>↗</span></div><div><strong>ESP Launchpad <em>Enhanced</em></strong><small>基于 Espressif ESP Launchpad 的非官方增强版</small></div><a href="index.html">原版界面 ↗</a></header>
+<main>
+<div id="visibility" class="notice" hidden>请切回本网页。后台计时器节流会影响自动进入下载模式。</div>
+<div id="message" role="status" aria-live="polite">正在加载工具…</div>
+<section class="card"><div class="section-title"><h2><b>01</b> 连接设备</h2><output id="state" class="pill">未连接</output></div>
+<div class="controls"><label class="connection-mode"><span>连接方式</span><select id="mode"><option value="usb_reset">原生 USB Serial/JTAG · 自动进入下载模式</option><option value="helper_reset">原生 USB · 优先接管，失败自动恢复</option><option value="no_reset">已在下载模式 · 不复位</option><option value="default_reset">USB 转 UART · 自动下载电路</option></select></label><button id="connect" class="primary" disabled>连接设备</button></div>
+
+<details id="connectionHelp"><summary>连接遇到问题？</summary>
+<p id="helperRecovery" class="hint"><button id="launchHelper">启动 USB 恢复助手</button> <button id="directChoose">设备已稳定，直接授权</button><br>首次使用请先运行启动包一次，注册网页唤起入口。换模组后可从此处启动，系统可能要求确认打开助手。</p>
+<p id="helperStatus" class="hint" role="status" hidden></p>
+<p id="helperDownload" class="hint">设备频繁重启，无法完成首次授权？<a href="dist/downloads/esp-launchpad-enhanced-usb-helper.zip" download>下载独立环境 USB 助手</a>，解压运行后再连接网页。首次运行需要联网。</p></details>
+
+<div class="facts"><div><small>芯片</small><strong id="chip">—</strong></div><div><small>Flash ID</small><strong id="flashId">—</strong></div><div><small>Flash 容量</small><strong id="capacity">—</strong></div><div><small>连接状态</small><strong id="connectionNote">等待设备</strong></div></div>
+</section>
+<section class="card"><div class="section-title"><h2><b>02</b> 读取与烧录</h2><button id="read" disabled>读取启动区 4 KB</button></div>
+<p class="hint">选择匹配芯片的固件，按构建产物填写地址；烧录会覆盖对应扇区。</p>
+<div id="images"></div><div class="controls"><button id="add" disabled>＋ 添加文件</button><label class="check"><input type="checkbox" id="confirm">我已核对芯片、文件和地址，允许覆盖这些 Flash 扇区</label></div>
+<div class="controls bottom"><button id="erase" class="danger" disabled>全片擦除</button><button id="flash" class="primary" disabled>烧录并校验</button><span>完成后保持下载状态，不自动复位空 Flash。</span></div><progress id="progress" max="100" value="0"></progress>
+</section>
+<section class="card"><div class="section-title"><h2><b>03</b> 控制台</h2><span id="consoleState">未监听</span></div>
+<div class="controls"><label class="console-baud">波特率<select id="consoleBaud"><option>9600</option><option>19200</option><option>38400</option><option>57600</option><option selected>115200</option><option>230400</option><option>460800</option><option>921600</option></select></label><button id="consoleStart" disabled>开始监听</button><button id="consoleChoose" disabled>更换串口</button><button id="consoleClear">清空</button><button id="consoleExport">导出输出</button><label class="check"><input id="consoleFollow" type="checkbox" checked>自动滚动</label><button id="restart" disabled>模组重启</button></div>
+
+<details class="console-help"><summary>监听说明</summary><p class="hint">连接与烧录日志自动显示。开始监听会释放烧录连接，接收模组串口输出；停止后可重新连接烧录。保留最近 20 万字符，支持导出。UART0 日志需选择对应 USB 转串口。</p></details>
+<pre id="consoleOutput" aria-label="连接、烧录与模组输出"></pre></section>
+<details class="card logs"><summary>详细连接诊断</summary><div class="section-title"><div><button id="export">导出日志</button><button id="clear">清空</button></div></div><pre id="log" aria-label="诊断日志"></pre></details>
+<footer>固件文件在本机处理，不上传服务器。 · <a href="https://github.com/espressif/esp-launchpad">上游 ESP Launchpad</a> · Apache-2.0</footer></main>
+<dialog id="eraseDialog"><form method="dialog"><h2>确认全片擦除</h2><p id="eraseTarget"></p><p>将清除整片 Flash 的固件、配置与用户数据，无法撤销。擦除后保持下载模式，不自动重启。</p><label>输入 ERASE 确认<input id="eraseWord" type="text" autocomplete="off" spellcheck="false"></label><div class="controls bottom"><button value="cancel">取消</button><button id="eraseProceed" type="button" class="danger" disabled>确认擦除</button></div></form></dialog>
+<dialog id="restartDialog"><form method="dialog"><h2>重启模组</h2><p>重启将尝试运行 Flash 中的固件。空 Flash 可能再次反复重启；外部 BOOT 引脚仍需释放。使用 USB 转串口时，需要接好自动复位电路。</p><label class="check"><input id="restartListen" type="checkbox" checked>重启后监听串口输出</label><div class="controls bottom"><button value="cancel">取消</button><button id="restartProceed" type="button" class="primary">确认重启</button></div></form></dialog>
+<script type="module">
+import('./enhanced/app.js').catch(error => { document.getElementById('message').textContent='工具加载失败：'+error.message+'。请先运行 npm ci，再通过 npm start 打开。'; document.getElementById('connect').disabled=true; });
+</script></body></html>

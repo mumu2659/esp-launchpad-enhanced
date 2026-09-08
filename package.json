@@ -1,0 +1,27 @@
+{
+  "name": "esp-launchpad-enhanced",
+  "dependencies": {
+    "esptool-js": "0.6.1",
+    "js-md5": "0.8.3",
+    "smol-toml": "^1.6.1",
+    "xterm": "^4.17.0",
+    "xterm-addon-fit": "^0.5.0"
+  },
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test enhanced/core.test.mjs enhanced/handoff.test.mjs enhanced/launcher.test.mjs enhanced/monitor.test.mjs",
+    "test:browser": "playwright test",
+    "build": "node build.mjs",
+    "build:helper": "npm run build && python3 usb-helper/package.py",
+    "test:handoff": "playwright test tests/handoff.spec.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}
