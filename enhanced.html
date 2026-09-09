@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ESP Launchpad Enhanced</title><link rel="stylesheet" href="enhanced/style.css"></head>
-<body><header><div class="mark">E<span>↗</span></div><div><strong>ESP Launchpad <em>Enhanced</em></strong><small>基于 Espressif ESP Launchpad 的非官方增强版</small></div><a href="index.html">原版界面 ↗</a></header>
+<body><header><div class="mark">E<span>↗</span></div><div><strong>ESP Launchpad <em>Enhanced</em></strong><small>基于 Espressif ESP Launchpad 的非官方增强版</small></div><a href="https://espressif.github.io/esp-launchpad/" target="_blank" rel="noopener noreferrer">原版界面 ↗</a></header>
 <main>
 <div id="visibility" class="notice" hidden>请切回本网页。后台计时器节流会影响自动进入下载模式。</div>
 <div id="message" role="status" aria-live="polite">正在加载工具…</div>
@@ -32,5 +32,5 @@
 <dialog id="eraseDialog"><form method="dialog"><h2>确认全片擦除</h2><p id="eraseTarget"></p><p>将清除整片 Flash 的固件、配置与用户数据，无法撤销。擦除后保持下载模式，不自动重启。</p><label>输入 ERASE 确认<input id="eraseWord" type="text" autocomplete="off" spellcheck="false"></label><div class="controls bottom"><button value="cancel">取消</button><button id="eraseProceed" type="button" class="danger" disabled>确认擦除</button></div></form></dialog>
 <dialog id="restartDialog"><p id="restartSource"></p><form method="dialog"><h2>重启模组</h2><p>重启将尝试运行 Flash 中的固件。空 Flash 可能再次反复重启；外部 BOOT 引脚仍需释放。使用 USB 转串口时，需要接好自动复位电路。</p><label class="check"><input id="restartListen" type="checkbox" checked>重启后监听串口输出</label><div class="controls bottom"><button value="cancel">取消</button><button id="restartProceed" type="button" class="primary">确认重启</button></div></form></dialog>
 <script type="module">
-import('./enhanced/app.js?v=20260909-console2').catch(error => { document.getElementById('message').textContent='工具加载失败：'+error.message+'。请重新启动本地助手后刷新页面；线上页面请强制刷新。'; document.getElementById('connect').disabled=true; });
+import('./enhanced/app.js?v=20260909-lifecycle1').catch(error => { document.getElementById('message').textContent='工具加载失败：'+error.message+'。请重新启动本地助手后刷新页面；线上页面请强制刷新。'; document.getElementById('connect').disabled=true; });
 </script></body></html>

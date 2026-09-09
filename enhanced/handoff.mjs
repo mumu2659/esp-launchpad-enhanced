@@ -28,7 +28,7 @@ export async function prepareOffline() {
   }
   // Fetch on the visible page, not during worker installation. The worker
   // only verifies and serves the cache; local-network fetch permissions vary.
-  const files=['./','./enhanced/app.js?v=20260909-console2','./enhanced/core.mjs','./enhanced/handoff.mjs','./enhanced/launcher.mjs','./enhanced/monitor.mjs',
+  const files=['./','./enhanced/app.js?v=20260909-lifecycle1','./enhanced/core.mjs','./enhanced/handoff.mjs','./enhanced/launcher.mjs','./enhanced/monitor.mjs',
     './enhanced/style.css','./node_modules/esptool-js/bundle.js','./node_modules/js-md5/build/md5.min.js'];
   const urls=files.map(path=>new URL(path,location.href).href);
   const responses=await Promise.all(urls.map(async url=>{

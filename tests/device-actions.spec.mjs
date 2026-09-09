@@ -207,3 +207,12 @@ test('baud rates are per UART and absent from USB controls',async({page})=>{
   expect(await page.evaluate(()=>window.uarts.map(p=>p.options.baudRate))).toEqual([9600,230400]);
   await page.locator('#closeUART0').click();await page.locator('#closeUART1').click();
 });
+
+test('page exit releases all owned ports and upstream opens in a new tab',async({page})=>{
+  await installUarts(page);await page.locator('#chooseUART0').click();await page.locator('#chooseUART1').click();
+  await page.evaluate(()=>window.dispatchEvent(new Event('pagehide')));
+  await expect.poll(()=>page.evaluate(()=>window.testPort.readable===null && window.uarts.every(p=>p.readable===null))).toBe(true);
+  const link=page.getByRole('link',{name:'原版界面 ↗'});
+  await expect(link).toHaveAttribute('target','_blank');
+  await expect(link).toHaveAttribute('rel','noopener noreferrer');
+});

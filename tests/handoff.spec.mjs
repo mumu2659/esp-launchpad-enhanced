@@ -62,6 +62,9 @@ test('successful browser handoff exits real Python helper; offline read and relo
     await expect(page.locator('#message')).toContainText('前 4 KB 全为 FF');
     await page.reload();
     await expect(page.locator('#log')).toContainText('app.ready');
+    await expect(page.locator('#state')).toHaveText('未连接');
+    await expect(page.locator('#read')).toBeDisabled();
+    await page.locator('#connect').click();
     await expect(page.locator('#state')).toHaveText('已连接');
     await expect(page.locator('#helperStatus')).toContainText('网页独立运行');
     await page.locator('#read').click();

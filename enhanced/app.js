@@ -11,7 +11,7 @@ for(const id of ['chooseUSB','closeUSB','chooseUART0','closeUART0','chooseUART1'
   if(!$(id))throw new Error('页面与脚本版本不一致，缺少控件 '+id);
 }
 const events = [];
-let monitor, activeRole='USB';
+let monitor, activeRole='USB', pageLeaving=false, exitCleanup;
 const channels = {};
 const roles = ['USB','UART0','UART1'];
 const hasMonitors=()=>Object.values(channels).some(c=>c.monitor.active);
@@ -212,7 +212,7 @@ async function chooseAndConnect(useChooser = false) {
         matches:port=>!filters.length || (port.getInfo().usbVendorId===0x303a && port.getInfo().usbProductId===0x1001),
         cancelled:()=>cancelFinding || !visible()});
     }
-    if (cancelFinding) throw new Error('连接已取消。');
+    if (cancelFinding || pageLeaving) throw new Error('连接已取消。');
     finding = false;
     for(const c of Object.values(channels))if(c.monitor.port===selectedPort)await c.monitor.stop();
     log('port.selected', selectedPort.getInfo());
@@ -378,6 +378,7 @@ async function startConsole(choose=false,role=activeRole){
   busy=true;render();
   try {
     const port=await choice;choosing=false;
+    if(pageLeaving)return;
     for(const [other,entry] of Object.entries(channels)){
       if(other!==role && entry.monitor.port===port)throw Error('该端口正在 '+other+' 使用，请先断开该通道。');
     }
@@ -388,6 +389,7 @@ async function startConsole(choose=false,role=activeRole){
     c.baud=role==='USB'?115200:Number($('baud'+role).value);
     activeRole=role;monitor=c.monitor;
     await c.monitor.start(port,c.baud);
+    if(pageLeaving){await c.monitor.stop();return;}
     say(role+' 已连接并监听。UART 标签由实际接线决定。');
   } catch(error){
     if(choosing && error.name==='NotFoundError'){
@@ -465,7 +467,7 @@ window.enhancedDiagnostics = {events,connection};
 
 // Only the helper landing page makes one automatic connection attempt.
 // First authorization still requires a user gesture; getPorts never prompts.
-let helperAutoPending = launchParams.get('helper') === '1';
+let helperAutoPending = launchParams.get('helper') === '1' && performance.getEntriesByType('navigation')[0]?.type !== 'reload';
 async function connectAuthorizedOnArrival() {
   if (!helperAutoPending || !visible() || !navigator.serial || !window.isSecureContext) return;
   helperAutoPending = false;
@@ -514,3 +516,23 @@ document.addEventListener("visibilitychange",refreshAuthorization);
 navigator.serial?.addEventListener("connect",refreshAuthorization);
 navigator.serial?.addEventListener("disconnect",refreshAuthorization);
 refreshAuthorization();
+
+
+// Lifecycle cleanup is best effort: browsers do not await unload promises.
+function releaseOnExit(){
+  if(exitCleanup)return;
+  pageLeaving=true;userAction++;cancelFinding=true;helperAutoPending=false;
+  connection.cancel();
+  exitCleanup=Promise.allSettled([
+    ...Object.values(channels).map(c=>c.monitor.stop()),
+    connection.disconnect()
+  ]);
+}
+window.addEventListener('beforeunload',releaseOnExit);
+window.addEventListener('pagehide',releaseOnExit);
+window.addEventListener('pageshow',event=>{
+  if(event.persisted){
+    // Do not restore live port ownership from the back/forward cache.
+    Promise.resolve(exitCleanup).then(()=>{pageLeaving=false;exitCleanup=null;render();});
+  }
+});
