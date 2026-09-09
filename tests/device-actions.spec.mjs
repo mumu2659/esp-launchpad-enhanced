@@ -53,13 +53,21 @@ test('console closes loader first, displays raw text safely, and releases reader
   await page.locator('#consoleStart').click();
   await expect(page.locator('#consoleState')).toHaveText('正在监听');
   expect(await page.evaluate(()=>window.actions)).toEqual(['open','close','open']);
-  await expect(page.locator('#connect')).toBeDisabled();await expect(page.locator('#erase')).toBeDisabled();
+  await expect(page.locator('#connect')).toBeEnabled();await expect(page.locator('#erase')).toBeDisabled();
   await page.evaluate(()=>window.serialOutput.enqueue(new TextEncoder().encode('启动成功 <script>alert(1)</script>\n')));
   await expect(page.locator('#consoleOutput')).toContainText('启动成功 <script>');
   expect(await page.locator('#consoleOutput script').count()).toBe(0);
-  await expect(page.locator('#consoleStart')).toHaveText('停止监听');
+  await expect(page.locator('#consoleStart')).toHaveText('暂停监听');
   expect(await page.locator('#consoleStop').count()).toBe(0);
-  await page.locator('#consoleStart').click();await expect(page.locator('#consoleState')).toHaveText('未监听');
+  await page.locator('#consoleStart').click();await expect(page.locator('#consoleState')).toHaveText('已暂停 · 保持连接');
+  expect(await page.evaluate(()=>window.testPort.readable!==null)).toBe(true);
+  await page.evaluate(()=>window.serialOutput.enqueue(new TextEncoder().encode('PAUSED_DATA')));
+  await page.waitForTimeout(50);
+  await expect(page.locator('#consoleOutput')).not.toContainText('PAUSED_DATA');
+  await page.locator('#consoleStart').click();
+  await page.evaluate(()=>window.serialOutput.enqueue(new TextEncoder().encode('RESUMED_DATA')));
+  await expect(page.locator('#consoleOutput')).toContainText('RESUMED_DATA');
+  await page.locator('#closeUSB').click();await expect(page.locator('#consoleState')).toHaveText('未监听');
   await expect(page.locator('#consoleStart')).toHaveText('开始监听');
   expect(await page.evaluate(()=>window.testPort.readable)).toBeNull();await expect(page.locator('#connect')).toBeEnabled();
   await page.locator('#consoleClear').click();await expect(page.locator('#consoleOutput')).toBeEmpty();
@@ -101,4 +109,101 @@ test('single connection button disconnects, reconnects and cancels an in-flight 
   await expect(page.locator('#connect')).toHaveText('连接设备');
   await expect(page.locator('#state')).toHaveText('未连接');
   expect(await page.evaluate(()=>window.testPort.readable)).toBeNull();
+});
+
+test('port chooser opens directly with combined filters and preserves connection on cancel',async({page})=>{
+  await page.evaluate(()=>{navigator.serial.requestPort=async options=>{window.choiceOptions=options;return window.testPort;};});
+  await page.locator('#consoleStart').click();
+  await page.locator('#chooseUSB').click();
+  await expect(page.locator('#consoleState')).toHaveText('正在监听');
+  expect(await page.locator('#portDialog').count()).toBe(0);
+  const options=await page.evaluate(()=>window.choiceOptions);
+  expect(options.filters).toContainEqual({usbVendorId:0x34bf,usbProductId:0xff0a});
+  expect(options.filters).toContainEqual({usbVendorId:0x303a,usbProductId:0x1001});
+  await page.getByText('高级选项',{exact:true}).click();
+  await page.locator('#consoleAll').check();
+  await page.locator('#chooseUSB').click();
+  expect(await page.evaluate(()=>window.choiceOptions)).toEqual({});
+  await page.evaluate(()=>{navigator.serial.requestPort=async()=>{throw new DOMException('cancelled','NotFoundError');};});
+  await page.locator('#chooseUSB').click();
+  await expect(page.locator('#message')).toContainText('未选择串口');
+  await expect(page.locator('#consoleState')).toHaveText('正在监听');
+  await page.locator('#connect').click();
+});
+
+async function installUarts(page){
+  await page.evaluate(()=>{
+    window.uarts=[0,1].map(i=>({
+      closes:0,getInfo:()=>({usbVendorId:0x34bf,usbProductId:0xff0a}),
+      async open(options){this.options=options;if(this.readable)throw Error('already open');this.readable=new ReadableStream({start:c=>{this.output=c;}});},
+      async close(){if(this.readable.locked)throw Error('locked');this.closes++;this.readable=null;}
+    }));
+    let index=0;navigator.serial.requestPort=async()=>window.uarts[index++];
+  });
+}
+test('three sources filter cached output independently, pause together, and release only the download port',async({page})=>{
+  await page.locator('#consoleStart').click();
+  await installUarts(page);
+  await page.locator('#chooseUART0').click();
+  await page.locator('#chooseUART1').click();
+  await page.evaluate(()=>{
+    window.serialOutput.enqueue(new TextEncoder().encode('usb message\n'));
+    window.uarts[0].output.enqueue(new TextEncoder().encode('uart zero\n'));
+    window.uarts[1].output.enqueue(new TextEncoder().encode('uart one\n'));
+  });
+  await expect(page.locator('#consoleOutput')).toContainText('[USB] usb message');
+  await expect(page.locator('#consoleOutput')).toContainText('[UART0] uart zero');
+  await expect(page.locator('#consoleOutput')).toContainText('[UART1] uart one');
+  await page.locator('#showUART0').uncheck();
+  await expect(page.locator('#consoleOutput')).not.toContainText('uart zero');
+  await page.evaluate(()=>window.uarts[0].output.enqueue(new TextEncoder().encode('hidden cached\n')));
+  await page.waitForTimeout(50);
+  await expect(page.locator('#consoleOutput')).not.toContainText('hidden cached');
+  await page.locator('#showUART0').check();
+  await expect(page.locator('#consoleOutput')).toContainText('hidden cached');
+  await page.locator('#consoleStart').click();
+  await expect(page.locator('#statusUART1')).toHaveText('已暂停');
+  await page.evaluate(()=>window.uarts[1].output.enqueue(new TextEncoder().encode('discard while paused\n')));
+  await page.waitForTimeout(50);
+  await page.locator('#consoleStart').click();
+  await expect(page.locator('#consoleOutput')).not.toContainText('discard while paused');
+  await page.locator('#connect').click();
+  await expect(page.locator('#state')).toHaveText('已连接');
+  await expect(page.locator('#statusUSB')).toHaveText('已选择');
+  await expect(page.locator('#statusUART0')).toHaveText('监听中');
+  expect(await page.evaluate(()=>window.uarts.map(p=>p.closes))).toEqual([0,0]);
+  await page.locator('#closeUART0').click();
+  await expect(page.locator('#statusUART1')).toHaveText('监听中');
+  await page.evaluate(()=>window.uarts[1].output.enqueue(new TextEncoder().encode('still alive\n')));
+  await expect(page.locator('#consoleOutput')).toContainText('still alive');
+  await page.locator('#closeUART1').click();await page.locator('#connect').click();
+});
+test('duplicate port is rejected without disrupting its owner; unplug leaves other channel running',async({page})=>{
+  await installUarts(page);
+  await page.locator('#chooseUART0').click();
+  await page.evaluate(()=>{navigator.serial.requestPort=async()=>window.uarts[0];});
+  await page.locator('#chooseUART1').click();
+  await expect(page.locator('#message')).toContainText('正在 UART0 使用');
+  expect(await page.evaluate(()=>window.uarts[0].closes)).toBe(0);
+  await page.evaluate(()=>{navigator.serial.requestPort=async()=>window.uarts[1];});
+  await page.locator('#chooseUART1').click();
+  await page.evaluate(()=>window.uarts[0].output.error(Error('unplugged')));
+  await expect(page.locator('#statusUART0')).toHaveText('已选择');
+  await expect(page.locator('#statusUART1')).toHaveText('监听中');
+  await expect(page.locator('#state')).toHaveText('已连接');
+  await page.locator('#closeUART1').click();await page.locator('#connect').click();
+});
+
+test('baud rates are per UART and absent from USB controls',async({page})=>{
+  expect(await page.locator('#consoleBaud,#consoleChannel,#consoleChoose').count()).toBe(0);
+  expect(await page.locator('#showUSB').locator('..').locator('..').locator('select').count()).toBe(0);
+  await installUarts(page);
+  await page.locator('#baudUART0').selectOption('9600');
+  await page.locator('#chooseUART0').click();
+  await expect(page.locator('#baudUART0')).toBeDisabled();
+  await expect(page.locator('#baudUART1')).toBeEnabled();
+  await page.locator('#baudUART1').selectOption('230400');
+  await page.locator('#chooseUART1').click();
+  expect(await page.evaluate(()=>window.uarts.map(p=>p.options.baudRate))).toEqual([9600,230400]);
+  await page.locator('#closeUART0').click();await page.locator('#closeUART1').click();
 });

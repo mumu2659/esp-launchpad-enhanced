@@ -28,11 +28,11 @@ The helper attempts to put the ESP32-C6 into download mode through native USB, r
 - Read-only download of the first 4 KB of Flash.
 - Flash multiple images or a merged image, with address, sector-overlap, capacity, and MD5 checks.
 - Full-chip erase with target details and an explicit `ERASE` confirmation.
-- A shared console for connection, flashing, and raw serial output, with baud-rate selection, start/stop, port selection, auto-scroll, clear, and export.
+- A shared console for connection, flashing, and raw serial output, with baud-rate selection, pause/resume, filtered port selection, auto-scroll, clear, and export.
 - Module reset with confirmation and optional serial monitoring.
 - An optional local USB recovery helper with browser handoff and automatic exit.
 
-The interface uses a single connect/disconnect control and a single start/stop monitoring control. Recovery options and detailed diagnostics are collapsed by default.
+The interface uses a single connect/disconnect control and a single pause/resume monitoring control. Recovery options and detailed diagnostics are collapsed by default.
 
 ## USB helper behavior
 
@@ -48,7 +48,15 @@ See the [USB helper guide](usb-helper/README.md) for installation locations, log
 
 ## Console, erase, and reset
 
-Connection and flashing logs appear without starting serial monitoring. Starting monitoring releases the flashing connection and reads raw serial output without an automatic reset. Monitoring and flashing do not read the port concurrently.
+Connection and flashing logs appear without starting serial monitoring. USB, UART0, and UART1 have independent port connections. Assign UART labels according to the wiring; neither a USB port name nor a module MAC identifies the UART channel.
+
+Each connected source is shown by default. Source checkboxes filter the display without stopping reception; checking a source again restores its retained output. Received device output includes a UTC receive timestamp and source label. Export follows the current source filter; Clear removes all retained output, including hidden sources.
+
+Pause/Resume applies to all active monitor channels. Pausing keeps their ports open and drains incoming data without retaining it. Each source has its own Disconnect button. The top connection button controls the download session independently.
+
+Starting monitoring releases a download session only if it owns the same port. Connecting for download releases only the monitor on the selected port; other monitor channels continue receiving. A port cannot be actively assigned to two monitor channels. Each UART channel has its own baud-rate setting, editable while disconnected; native USB has no baud-rate control. Reset targets the most recently opened monitor channel, or the download session when that channel is not open, and identifies the target in its confirmation.
+
+Change Port opens the browser device picker directly, filtering native USB and supported USB-to-UART adapters. An advanced option shows all ports. Port selections remain in the current page only.
 
 The console supports baud rates from 9600 to 921600, streaming UTF-8 decoding, and plain-text output. It retains the latest 200,000 characters. Clear and export apply to all retained console output.
 

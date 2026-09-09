@@ -8,13 +8,36 @@ import {SerialMonitor,restartDevice} from './monitor.mjs';
 
 const $ = id => document.getElementById(id);
 const events = [];
-let monitor;
+let monitor, activeRole='USB';
+const channels = {};
+const roles = ['USB','UART0','UART1'];
+const hasMonitors=()=>Object.values(channels).some(c=>c.monitor.active);
+let consoleRows=[], consoleChars=0, consoleFrame;
 let busy = false, flashBytes = 0, selectedPort, finding = false, cancelFinding = false, selectedMac = null;
 const visible = () => document.visibilityState === 'visible';
 const say = text => { $('message').textContent = text; };
-function appendConsole(text) {
-  $('consoleOutput').textContent=($('consoleOutput').textContent+text).slice(-200000);
+function paintConsole(){
+  consoleFrame=null;
+  $('consoleOutput').textContent=consoleRows.filter(row=>row.source==='工具' || $('show'+row.source).checked).map(row=>row.text).join('');
   if($('consoleFollow').checked)$('consoleOutput').scrollTop=$('consoleOutput').scrollHeight;
+}
+function appendConsole(text,source='工具') {
+  if(!text)return;
+  const stamp=new Date().toISOString().slice(11,23);
+  const last=consoleRows.at(-1);
+  if(last?.source===source && !last.text.endsWith('\n')){
+    last.text+=text;consoleChars+=text.length;
+  } else {
+    if(last && !last.text.endsWith('\n')){last.text+='\n';consoleChars++;}
+    const tagged=(source==='工具'?'':stamp+' ['+source+'] ')+text;
+    consoleRows.push({source,text:tagged});consoleChars+=tagged.length;
+  }
+  while(consoleChars>200000 && consoleRows.length){
+    const extra=consoleChars-200000, first=consoleRows[0];
+    if(first.text.length<=extra){consoleChars-=first.text.length;consoleRows.shift();}
+    else{first.text=first.text.slice(extra);consoleChars-=extra;}
+  }
+  if(consoleFrame==null)consoleFrame=requestAnimationFrame(paintConsole);
 }
 function log(event, data = {}) {
   const entry = {time: new Date().toISOString(), ms: Math.round(performance.now()), event, ...data};
@@ -38,30 +61,39 @@ function log(event, data = {}) {
 }
 function render() {
   const listening=!!monitor?.active;
-  const ready = connection.state === 'ready' && !listening;
-  $('state').textContent = listening?{opening:'正在打开串口',listening:'串口监听中',stopping:'正在停止监听',error:'串口待释放'}[monitor.state]:{idle:'未连接',connecting:'正在连接',ready:'已连接',error:'需要恢复',disconnecting:'正在断开'}[connection.state];
+  const ready = connection.state === 'ready';
+  $('state').textContent = {idle:'未连接',connecting:'正在连接',ready:'已连接',error:'需要恢复',disconnecting:'正在断开'}[connection.state];
   $('connectionNote').textContent = ready ? '保持下载模式' : $('state').textContent;
   const cancelling=finding || connection.state==='connecting';
   $('connect').classList.toggle('disconnect-action',connection.state==='ready' || connection.state==='disconnecting');
   $('connect').textContent=cancelling?'取消连接':connection.state==='disconnecting'?'正在断开…':connection.state==='ready'?'断开':connection.state==='error'?'释放连接':'连接设备';
-  $('connect').disabled=listening || (busy && !finding) || connection.state==='disconnecting' || (connection.state==='idle' && (!visible() || !navigator.serial || !window.isSecureContext));
-  const cannotOpen=listening || busy || connection.state!=='idle' || !visible() || !navigator.serial || !window.isSecureContext;
+  $('connect').disabled=(busy && !finding) || connection.state==='disconnecting' || (connection.state==='idle' && (!visible() || !navigator.serial || !window.isSecureContext));
+  const cannotOpen=hasMonitors() || busy || connection.state!=='idle' || !visible() || !navigator.serial || !window.isSecureContext;
   $('launchHelper').disabled=cannotOpen;
   $('directChoose').disabled=cannotOpen;
-  $('mode').disabled = listening || busy || connection.state !== 'idle';
+  $('mode').disabled = busy || connection.state !== 'idle';
   $('read').disabled = busy || !ready || !visible();
   $('flash').disabled = busy || !ready || !visible() || !$('confirm').checked || !flashBytes;
   $('add').disabled = busy;
   $('confirm').disabled = busy;
   $('images').querySelectorAll('input,button').forEach(el => el.disabled = busy);
   $('erase').disabled=busy || !ready || !visible();
-  $('restart').disabled=busy || (!ready && monitor?.state!=='listening') || !visible();
-  const cannotStartConsole=busy || listening || !['idle','ready'].includes(connection.state) || !visible() || !navigator.serial;
-  $('consoleChoose').disabled=cannotStartConsole;
-  $('consoleStart').textContent={opening:'正在打开…',listening:'停止监听',stopping:'正在停止…',error:'重试停止'}[monitor?.state] || '开始监听';
-  $('consoleStart').disabled=listening?(busy || monitor.state==='opening' || monitor.state==='stopping'):cannotStartConsole;
-  $('consoleStart').classList.toggle('stop-listening',listening);
-  $('consoleBaud').disabled=busy || listening;
+  $('restart').disabled=busy || (!ready && !['listening','paused'].includes(monitor?.state)) || !visible();
+  const transitioning=Object.values(channels).some(c=>['opening','stopping','error'].includes(c.monitor.state));
+  const anyListening=Object.values(channels).some(c=>c.monitor.state==='listening');
+  $('consoleStart').textContent=transitioning?'释放监听连接':anyListening?'暂停监听':hasMonitors()?'继续监听':'开始监听';
+  $('consoleStart').disabled=busy || !visible() || !navigator.serial || !['idle','ready'].includes(connection.state);
+  $('consoleStart').classList.toggle('stop-listening',anyListening);
+  $('consoleStart').classList.toggle('resume-listening',hasMonitors() && !anyListening && !transitioning);
+  $('consoleState').textContent=transitioning?'端口待释放':anyListening?'正在监听':hasMonitors()?'已暂停 · 保持连接':'未监听';
+  for(const role of roles){
+    const c=channels[role];if(!c)continue;
+    $('show'+role).disabled=!c.bound && !consoleRows.some(row=>row.source===role);
+    if(role!=='USB')$('baud'+role).disabled=busy || c.monitor.active;
+    $('status'+role).textContent={idle:c.bound?'已选择':'未连接',listening:'监听中',paused:'已暂停',opening:'打开中',stopping:'释放中',error:'待释放'}[c.monitor.state];
+    $('choose'+role).disabled=busy || transitioning || !visible() || !['idle','ready'].includes(connection.state);
+    $('close'+role).disabled=busy || !c.monitor.active || ['opening','stopping'].includes(c.monitor.state);
+  }
   $('visibility').hidden = visible();
 }
 
@@ -157,11 +189,12 @@ const connection = new Connection({create,close,visible,log,changed:render,
       matches:p=>p.getInfo().usbVendorId===info.usbVendorId && p.getInfo().usbProductId===info.usbProductId,
       cancelled:()=>cancelled() || !visible()});
     if(next!==port)log('port.reenumerated',{attempt,identityCheck:selectedMac?'MAC pinned':'first identification'});
+    for(const c of Object.values(channels))if(c.monitor.port===next)await c.monitor.stop();
     selectedPort=next;return next;
   }});
 
 async function chooseAndConnect(useChooser = false) {
-  if (!visible() || busy || monitor?.active || connection.state !== 'idle') return;
+  if (!visible() || busy || connection.state !== 'idle') return;
   busy = true; finding = true; cancelFinding = false; render();
   try {
     const nativeUsb = ['usb_reset','helper_reset'].includes($('mode').value) || (launchParams.get('helper') === '1' && $('mode').value === 'no_reset');
@@ -178,6 +211,7 @@ async function chooseAndConnect(useChooser = false) {
     }
     if (cancelFinding) throw new Error('连接已取消。');
     finding = false;
+    for(const c of Object.values(channels))if(c.monitor.port===selectedPort)await c.monitor.stop();
     log('port.selected', selectedPort.getInfo());
     flashBytes = 0; $('chip').textContent = $('flashId').textContent = $('capacity').textContent = '—';
     busy = false;
@@ -313,46 +347,84 @@ $('eraseProceed').onclick=()=>{
     finally {if(!$('progress').hasAttribute('value'))$('progress').value=0;}
   });
 };
-monitor=new SerialMonitor({
-  data:appendConsole,
-  error:error=>{log('console.error',{message:error.message});say('串口监听中断：'+error.message);},
-  changed:state=>{
-    $('consoleState').textContent={idle:'未监听',opening:'正在打开',listening:'正在监听',stopping:'正在停止',error:'端口待释放'}[state];
-    if(state==='idle' && !busy && !monitor.lastError)say('串口监听已结束，串口已释放。需要时可重新开始监听。');
-    log('console.state',{state});render();
-  }
-});
-async function startConsole(choose=false){
-  if(busy || monitor.active || !visible())return;
+for(const role of roles){
+  channels[role]={bound:null,baud:115200,monitor:new SerialMonitor({
+    data:text=>appendConsole(text,role),
+    error:error=>{log('console.error',{message:role+': '+error.message});say(role+' 监听中断：'+error.message);},
+    changed:state=>{log('console.state',{source:role,state});render();}
+  })};
+  $('show'+role).onchange=paintConsole;
+  $('choose'+role).onclick=()=>startConsole(true,role);
+  $('close'+role).onclick=()=>stopChannel(role);
+}
+monitor=channels.USB.monitor;
+async function stopChannel(role){
+  if(busy)return;busy=true;render();
+  try{await channels[role].monitor.stop();say(role+' 串口已释放。');}
+  catch(error){say(error.message);}
+  finally{busy=false;render();}
+}
+async function startConsole(choose=false,role=activeRole){
+  const c=channels[role];
+  if(busy || (c.monitor.active && !choose) || !visible())return;
   userAction++;
-  // requestPort must happen in this click, before awaiting disconnect/other work.
-  const choice=selectedPort && !choose?Promise.resolve(selectedPort):navigator.serial.requestPort();
+  let choosing=true;
+  // Keep requestPort in the original click gesture.
+  const previous=c.bound || (role==='USB'?selectedPort:null);
+  const choice=previous && !choose?Promise.resolve(previous):navigator.serial.requestPort(consolePortOptions());
   busy=true;render();
   try {
-    const port=await choice;
-    await connection.disconnect();
-    if(selectedPort!==port){selectedMac=null;selectedPort=port;}
-    await monitor.start(port,Number($('consoleBaud').value));
-    say('正在监听串口输出；需要启动固件时可点击“模组重启”。');
-  } catch(error){log('console.error',{message:error.message});say(error.message+'；可断开设备后重新选择串口。');}
-  finally{busy=false;render();}
+    const port=await choice;choosing=false;
+    for(const [other,entry] of Object.entries(channels)){
+      if(other!==role && entry.monitor.port===port)throw Error('该端口正在 '+other+' 使用，请先断开该通道。');
+    }
+    await c.monitor.stop();
+    if(connection.session?.transport.device===port)await connection.disconnect();
+    for(const [other,entry] of Object.entries(channels))if(other!==role && entry.bound===port)entry.bound=null;
+    c.bound=port;
+    c.baud=role==='USB'?115200:Number($('baud'+role).value);
+    activeRole=role;monitor=c.monitor;
+    await c.monitor.start(port,c.baud);
+    say(role+' 已连接并监听。UART 标签由实际接线决定。');
+  } catch(error){
+    if(choosing && error.name==='NotFoundError'){
+      log('console.selection-cancelled',{message:error.message});
+      say('未选择串口，原有连接未改变。列表为空时可在高级选项中显示全部串口。');
+    }else{log('console.error',{message:error.message});say(error.message);}
+  } finally{busy=false;render();}
 }
-$('consoleStart').onclick=()=>monitor.active?stopConsole():startConsole();
-$('consoleChoose').onclick=()=>startConsole(true);
+function consolePortOptions(){
+  if($('consoleAll').checked)return {};
+  return {filters:[{usbVendorId:0x303a,usbProductId:0x1001},
+    {usbVendorId:0x0403,usbProductId:0x6001},{usbVendorId:0x0403,usbProductId:0x6010},
+    {usbVendorId:0x0403,usbProductId:0x6011},{usbVendorId:0x0403,usbProductId:0x6014},
+    {usbVendorId:0x10c4,usbProductId:0xea60},{usbVendorId:0x1a86,usbProductId:0x7523},
+    {usbVendorId:0x1a86,usbProductId:0x5523},{usbVendorId:0x1a86,usbProductId:0x55d4},
+    {usbVendorId:0x067b,usbProductId:0x2303},{usbVendorId:0x34bf,usbProductId:0xff0a}]};
+}
+$('consoleStart').onclick=()=>{
+  const entries=Object.values(channels);
+  if(entries.some(c=>c.monitor.state==='error'))return stopConsole();
+  if(entries.some(c=>c.monitor.state==='listening')){
+    for(const c of entries)c.monitor.pause();
+    say('全部监听已暂停，连接保持；暂停期间数据不保留。');
+  }else if(hasMonitors()){
+    for(const c of entries)c.monitor.resume();say('已继续监听全部连接。');
+  }else return startConsole();
+};
 async function stopConsole(){
   if(busy)return;busy=true;render();
-  const started=performance.now();log('console.stop-requested');
-  try{await monitor.stop();log('console.stop-complete',{elapsed:Math.round(performance.now()-started)});say('监听已停止，串口已释放。');}
-  catch(error){say(error.message);log('console.error',{message:error.message});}
+  try{for(const c of Object.values(channels))await c.monitor.stop();say('监听串口已释放。');}
+  catch(error){say(error.message);}
   finally{busy=false;render();}
 }
-$('consoleClear').onclick=()=>{$('consoleOutput').textContent='';};
-$('consoleExport').onclick=()=>download($('consoleOutput').textContent,'esp-serial-console.txt','text/plain;charset=utf-8');
+$('consoleClear').onclick=()=>{consoleRows=[];consoleChars=0;paintConsole();};
+$('consoleExport').onclick=()=>download(consoleRows.filter(row=>row.source==='工具' || $('show'+row.source).checked).map(row=>row.text).join(''),'esp-serial-console.txt','text/plain;charset=utf-8');
 let resetTarget;
 $('restart').onclick=()=>{
   if(busy || !visible())return;
   resetTarget=monitor.port || connection.session?.transport.device;
-  if(resetTarget)$('restartDialog').showModal();
+  if(resetTarget){$('restartSource').textContent=monitor.port?'目标通道：'+activeRole:'目标：下载连接设备';$('restartDialog').showModal();}
 };
 $('restartProceed').onclick=async()=>{
   if(busy || !visible() || resetTarget!==(monitor.port || connection.session?.transport.device))return;
@@ -360,9 +432,9 @@ $('restartProceed').onclick=async()=>{
   const listen=$('restartListen').checked;
   let opened=false;
   try {
-    await monitor.stop();await connection.disconnect();
-    if(listen)await monitor.start(resetTarget,Number($('consoleBaud').value));
-    else {await resetTarget.open({baudRate:Number($('consoleBaud').value),bufferSize:65536});opened=true;}
+    await monitor.stop();if(connection.session?.transport.device===resetTarget)await connection.disconnect();
+    if(listen)await monitor.start(resetTarget,channels[activeRole].baud);
+    else {await resetTarget.open({baudRate:channels[activeRole].baud,bufferSize:65536});opened=true;}
     log('device.restart-start');await restartDevice(resetTarget);
     log('device.restart-sent');say(listen?(monitor.state==='listening'?'已发送重启信号，正在监听启动输出。':'已发送重启信号，USB 连接已变化，请再次开始监听。'):'已发送重启信号，串口将释放。需要烧录时重新连接。');
   } catch(error){log('device.restart-error',{message:error.message});say('重启期间连接发生变化：'+error.message+'。请检查输出或重新连接。');}
@@ -401,7 +473,7 @@ async function connectAuthorizedOnArrival() {
       const info = port.getInfo();
       return info.usbVendorId === 0x303a && info.usbProductId === 0x1001;
     });
-    if (action !== userAction || busy || monitor?.active || connection.state !== 'idle') return;
+    if (action !== userAction || busy || hasMonitors() || connection.state !== 'idle') return;
     log('authorization.checked', {availableNativePorts:ports.length});
     if (!ports.length) {
       say('未发现可用的已授权 ESP USB 设备。请确认设备已接上，再点击“连接设备”。');
@@ -424,7 +496,7 @@ connectAuthorizedOnArrival();
 
 // Refresh liveness separately from USB permissions. Never auto-launch a native app.
 async function refreshHelperStatus(){
-  if(launchParams.get('helper')!=='1' || !visible() || monitor?.active || connection.state!=='idle')return;
+  if(launchParams.get('helper')!=='1' || !visible() || hasMonitors() || connection.state!=='idle')return;
   const state=await launcher.refresh();
   if(connection.state==='idle'){
     $('helperStatus').hidden=false;

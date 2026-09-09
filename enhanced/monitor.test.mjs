@@ -57,3 +57,13 @@ test('a stuck cancellation times out without claiming release or racing a second
   finishCancel();await retry;
   await monitor.start(port());await monitor.stop();
 });
+
+test('pause drains data without closing and resume keeps the same port',async()=>{
+  const p=port(),text=[];
+  const monitor=new SerialMonitor({data:x=>text.push(x),error:()=>{},changed:()=>{}});
+  await monitor.start(p);monitor.pause();
+  p.controller.enqueue(new TextEncoder().encode('discard'));await tick();
+  assert.equal(p.closes,0);assert.equal(monitor.active,true);assert.deepEqual(text,[]);
+  monitor.resume();p.controller.enqueue(new TextEncoder().encode('visible'));await tick();
+  assert.equal(text.join(''),'visible');await monitor.stop();assert.equal(p.closes,1);
+});

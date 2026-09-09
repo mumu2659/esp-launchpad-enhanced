@@ -16,12 +16,16 @@ export class SerialMonitor {
       this.set('idle');throw error;
     }
   }
+  pause(){if(this.state==='listening'){this.epoch=(this.epoch||0)+1;this.set('paused');}}
+  resume(){if(this.state==='paused'){this.epoch=(this.epoch||0)+1;this.set('listening');}}
   async readLoop(){
-    const decoder=new TextDecoder();
+    let decoder=new TextDecoder(), epoch=this.epoch;
     try {
-      while(this.state==='listening'){
+      while(['listening','paused'].includes(this.state)){
         const {value,done}=await this.reader.read();
-        if(done || this.state!=='listening')break;
+        if(done || !['listening','paused'].includes(this.state))break;
+        if(epoch!==this.epoch){decoder=new TextDecoder();epoch=this.epoch;}
+        if(this.state==='paused'){decoder=new TextDecoder();continue;}
         if(value)this.data(decoder.decode(value,{stream:true}));
       }
       const tail=decoder.decode();if(tail && this.state==='listening')this.data(tail);
