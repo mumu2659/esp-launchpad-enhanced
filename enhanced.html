@@ -32,5 +32,5 @@
 <dialog id="eraseDialog"><form method="dialog"><h2>确认全片擦除</h2><p id="eraseTarget"></p><p>将清除整片 Flash 的固件、配置与用户数据，无法撤销。擦除后保持下载模式，不自动重启。</p><label>输入 ERASE 确认<input id="eraseWord" type="text" autocomplete="off" spellcheck="false"></label><div class="controls bottom"><button value="cancel">取消</button><button id="eraseProceed" type="button" class="danger" disabled>确认擦除</button></div></form></dialog>
 <dialog id="restartDialog"><p id="restartSource"></p><form method="dialog"><h2>重启模组</h2><p>重启将尝试运行 Flash 中的固件。空 Flash 可能再次反复重启；外部 BOOT 引脚仍需释放。使用 USB 转串口时，需要接好自动复位电路。</p><label class="check"><input id="restartListen" type="checkbox" checked>重启后监听串口输出</label><div class="controls bottom"><button value="cancel">取消</button><button id="restartProceed" type="button" class="primary">确认重启</button></div></form></dialog>
 <script type="module">
-import('./enhanced/app.js').catch(error => { document.getElementById('message').textContent='工具加载失败：'+error.message+'。请先运行 npm ci，再通过 npm start 打开。'; document.getElementById('connect').disabled=true; });
+import('./enhanced/app.js?v=20260909-console2').catch(error => { document.getElementById('message').textContent='工具加载失败：'+error.message+'。请重新启动本地助手后刷新页面；线上页面请强制刷新。'; document.getElementById('connect').disabled=true; });
 </script></body></html>

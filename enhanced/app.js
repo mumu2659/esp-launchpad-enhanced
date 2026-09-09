@@ -7,6 +7,9 @@ import {createLauncher} from './launcher.mjs';
 import {SerialMonitor,restartDevice} from './monitor.mjs';
 
 const $ = id => document.getElementById(id);
+for(const id of ['chooseUSB','closeUSB','chooseUART0','closeUART0','chooseUART1','closeUART1','baudUART0','baudUART1','restartSource']){
+  if(!$(id))throw new Error('页面与脚本版本不一致，缺少控件 '+id);
+}
 const events = [];
 let monitor, activeRole='USB';
 const channels = {};

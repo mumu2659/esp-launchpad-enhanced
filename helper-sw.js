@@ -1,7 +1,7 @@
 // Cache only the application shell; never cache helper credentials or device data.
 const CACHE = 'esp-launchpad-helper-shell-v1';
 const BASE = new URL('./', self.location.href);
-const FILES = ['./', './enhanced/app.js', './enhanced/core.mjs', './enhanced/handoff.mjs','./enhanced/launcher.mjs','./enhanced/monitor.mjs',
+const FILES = ['./', './enhanced/app.js?v=20260909-console2', './enhanced/core.mjs', './enhanced/handoff.mjs','./enhanced/launcher.mjs','./enhanced/monitor.mjs',
   './enhanced/style.css', './node_modules/esptool-js/bundle.js', './node_modules/js-md5/build/md5.min.js'];
 const URLS = FILES.map(path => new URL(path, BASE).href);
 self.addEventListener('install', event => event.waitUntil(self.skipWaiting()));
